@@ -1,0 +1,34 @@
+name: Set up Python environment
+description: >-
+  Materializes template placeholders (a no-op in a real project), installs uv
+  with a warm cache, and syncs the locked dev environment. Every Python job uses
+  this so local and CI checks consume the same locked dependency graph.
+
+runs:
+  using: composite
+  steps:
+    # In the template repo the placeholders are still unfilled, which is by
+    # design - uv cannot parse a `{{ ... }}` marker as a distribution name. The
+    # checkout is disposable, so we fill it in with throwaway values here. In a
+    # project generated from the template this exits immediately, and it also
+    # tolerates the script having been deleted.
+    - name: Materialize template placeholders (no-op once initialized)
+      shell: bash
+      run: |
+        if [ -x scripts/init-project.sh ]; then
+          scripts/init-project.sh --ci
+        fi
+
+    - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      with:
+        # Pin the tool as well as the action so lock semantics cannot change
+        # underneath an otherwise identical CI run.
+        version: "0.12.0"
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+
+    # --locked fails the build if uv.lock is stale rather than silently
+    # re-resolving, so CI tests the dependency set the author actually locked.
+    - name: Install dependencies
+      shell: bash
+      run: uv sync --locked

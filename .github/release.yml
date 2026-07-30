@@ -1,0 +1,23 @@
+# Auto-generated release notes. GitHub uses this to bucket merged PRs by label
+# when you click "Generate release notes" on a new release, so the changelog
+# writes itself from the labels the project already applies.
+#
+# This is why there is no hand-maintained CHANGELOG.md: a file humans edit
+# drifts, and a squash-merged history plus labels already holds the truth.
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Features
+      labels: [feature]
+    - title: Bug fixes
+      labels: [bug]
+    - title: Documentation
+      labels: [documentation]
+    - title: Dependencies & CI
+      labels: [dependencies, ci]
+    - title: Other changes
+      labels: ["*"]

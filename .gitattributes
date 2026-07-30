@@ -1,0 +1,29 @@
+# Normalize line endings on checkin so a Windows clone never produces a
+# whitespace-only diff. Without this, CRLF churn shows up as "every line
+# changed" in review.
+* text=auto eol=lf
+
+# Keep the generated lockfile out of language stats and collapsed by default on
+# GitHub, but retain normal diffs: dependency changes are security-relevant and
+# must remain reviewable.
+uv.lock         linguist-generated=true
+
+# Always LF, regardless of platform - these are executed by shells and CI.
+*.sh            text eol=lf
+*.py            text eol=lf
+Justfile        text eol=lf
+
+# Binary: never try to merge or diff these as text.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.woff          binary
+*.woff2         binary
+*.parquet       binary
+*.onnx          binary
+*.pt            binary
+*.safetensors   binary
+*.pkl           binary

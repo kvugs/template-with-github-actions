@@ -1,0 +1,248 @@
+# Advisory checks report failures but do not block merging. If one stays red on
+# main, fix or remove it rather than training contributors to ignore failures.
+#
+# These checks depend on things no commit in this repository controls: an
+# upstream API changes shape, or a vulnerability feed learns something new about
+# an already-locked dependency. Pull requests cannot see that class of breakage,
+# because they only run when somebody happens to push. Hence the nightly
+# `schedule`, and hence `nightly-watchdog`: an advisory failure with no route to
+# a human is the same as no check at all, and nobody reads the Actions tab of a
+# repository they believe is healthy.
+name: Informational
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # 04:45 UTC. Off the hour on purpose - GitHub queues every `0 * * * *` cron
+    # at the same moment and delays the overflow. Two things about scheduled
+    # runs are easy to trip over: only the default branch's copy of this file is
+    # ever scheduled, so edits take effect once merged, and GitHub suspends the
+    # timer after 60 days with no repository activity.
+    - cron: "45 4 * * *"
+
+concurrency:
+  # `github.event_name` is in the key so the nightly run cannot cancel a push
+  # run that happens to share the same SHA.
+  group: info-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-external:
+    name: test-external
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      # Pytest exits 5 for an empty selection, which is legitimate before the
+      # project has integration tests.
+      - name: pytest -m external
+        run: |
+          set +e
+          uv run --locked pytest -m external
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            echo "::notice::No tests are marked 'external' yet - nothing to run."
+            exit 0
+          fi
+          exit "$code"
+
+  coverage:
+    name: coverage
+    # Coverage describes the change under review. Re-measuring an unchanged tree
+    # every night produces the same number and tells nobody anything.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: pytest --cov
+        shell: bash
+        run: |
+          set -o pipefail
+          uv run --locked pytest --cov --cov-report=term-missing --cov-report=xml \
+            | tee coverage.txt
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo '### Coverage'
+            echo '```'
+            tail -n 25 coverage.txt || true
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  dependency-audit:
+    name: dependency-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: Audit the locked dependency graph against OSV
+        run: uv audit --locked --preview-features audit-command
+
+  links:
+    name: links
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: Check external links in Markdown
+        run: uv run --locked pre-commit run lychee --hook-stage manual --all-files
+
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write # Upload SARIF to the Security tab.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy.sarif
+          exit-code: "1"
+      - name: Upload results
+        if: always()
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        continue-on-error: true # SARIF upload needs a public repo or GHAS.
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+  # Turns a red nightly run into a GitHub issue, and closes that issue once the
+  # night is green again. Both halves matter: a tracking issue that outlives the
+  # problem becomes another red thing people learn to scroll past, which is the
+  # exact failure this job exists to prevent.
+  nightly-watchdog:
+    name: nightly-watchdog
+    needs: [test-external, dependency-audit, links, trivy]
+    # `always()` because the interesting case is a dependency that failed, and
+    # the default `success()` would skip this job precisely then. Scheduled runs
+    # only: on a pull request or a push the failure is already in front of an
+    # author GitHub has already emailed, so a second channel is just noise.
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write # Open, comment on, and close the tracking issue.
+    env:
+      # `gh` needs no checkout as long as GH_REPO names the repository.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      # The title is the lookup key, so editing it orphans the open issue and
+      # the next failure opens a second one alongside it.
+      ISSUE_TITLE: Nightly advisory checks are failing on main
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RESULT_TEST_EXTERNAL: ${{ needs.test-external.result }}
+      RESULT_DEPENDENCY_AUDIT: ${{ needs.dependency-audit.result }}
+      RESULT_LINKS: ${{ needs.links.result }}
+      RESULT_TRIVY: ${{ needs.trivy.result }}
+    steps:
+      - name: Open, update, or close the tracking issue
+        shell: bash
+        run: |
+          # Only `failure` is actionable. `cancelled` means concurrency got
+          # there first and `skipped` means a condition said not to bother;
+          # raising an issue for either teaches people to ignore this one too.
+          # `cancelled` is still counted, separately, because it is the one
+          # result that means "we do not know" rather than "nothing to say".
+          failed=()
+          cancelled=()
+          passed=0
+          check() { # job-name result
+            case "$2" in
+              failure) failed+=("$1") ;;
+              success) passed=$((passed + 1)) ;;
+              cancelled) cancelled+=("$1") ;;
+            esac
+          }
+          check test-external "$RESULT_TEST_EXTERNAL"
+          check dependency-audit "$RESULT_DEPENDENCY_AUDIT"
+          check links "$RESULT_LINKS"
+          check trivy "$RESULT_TRIVY"
+
+          # "Nothing failed" is not "everything passed": a cancelled run
+          # reports no failures either. Closing the tracker on that would
+          # claim a verification that never happened, so say nothing and let
+          # tomorrow's run decide. Failures still get reported normally, even
+          # when a sibling job was cancelled alongside them.
+          if [ "${#failed[@]}" -eq 0 ] && { [ "$passed" -eq 0 ] || [ "${#cancelled[@]}" -gt 0 ]; }; then
+            echo "::notice::Nightly was inconclusive (passed: $passed, cancelled: ${cancelled[*]:-none}) - leaving any open issue as it is."
+            exit 0
+          fi
+
+          # Match the exact title rather than run a search query, so an
+          # unrelated issue that merely mentions these words is never mistaken
+          # for the tracker. Past 200 open issues this stops finding it and
+          # opens a duplicate, which is the harmless direction to fail in.
+          # The jq program, not the shell, expands jq's `$ENV` variable.
+          # shellcheck disable=SC2016
+          existing="$(gh issue list --state open --limit 200 --json number,title \
+            --jq 'map(select(.title == $ENV.ISSUE_TITLE)) | first | .number // empty')"
+
+          if [ "${#failed[@]}" -eq 0 ]; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" \
+                --reason completed \
+                --comment "The nightly run is green again: $RUN_URL"
+              echo "::notice::Nightly is green - closed issue #$existing."
+            else
+              echo "::notice::Nightly is green."
+            fi
+            exit 0
+          fi
+
+          # This is a literal printf format; no shell expansion is intended.
+          # shellcheck disable=SC2016
+          body="$(printf '%s\n' \
+            "The nightly run of the advisory checks failed on \`main\`." \
+            "" \
+            "$(printf -- '- `%s`\n' "${failed[@]}")" \
+            "" \
+            "Run: $RUN_URL" \
+            "" \
+            "Nothing is blocked, because these checks do not gate merging." \
+            "They do reach outside the repository, so a failure here often" \
+            "means something changed that no commit here caused: an upstream" \
+            "API, a model response, or a newly published advisory." \
+            "" \
+            "Fix the check or delete it. A check left red stops being a signal.")"
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+            echo "::warning::Nightly failed (${failed[*]}) - commented on issue #$existing."
+          else
+            url="$(gh issue create --title "$ISSUE_TITLE" --body "$body")"
+            echo "::warning::Nightly failed (${failed[*]}) - opened $url"
+          fi

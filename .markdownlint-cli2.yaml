@@ -1,0 +1,12 @@
+# Enforce document structure without imposing prose wrapping or table alignment.
+# Those are authoring preferences, not correctness, and would create noisy diffs.
+config:
+  line-length: false
+  table-column-style: false
+noProgress: true
+overrides:
+  - filter: [".github/pull_request_template.md"]
+    combine: merge
+    config:
+      # A PR body starts at h2 because GitHub supplies the PR title as h1.
+      first-line-h1: false

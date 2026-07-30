@@ -1,0 +1,48 @@
+# CodeQL: GitHub's own static analysis. Informational - results land in the
+# Security tab, they do not gate merges. Runs on PRs and weekly.
+#
+# `build-mode: none` is the correct mode for Python: there is nothing to compile,
+# so CodeQL analyses the source directly instead of tracing a build.
+name: CodeQL
+
+on:
+  pull_request:
+    paths: ["**/*.py", ".github/workflows/codeql.yml"]
+  push:
+    branches: [main]
+    paths: ["**/*.py", ".github/workflows/codeql.yml"]
+  schedule:
+    - cron: "45 12 * * 5" # Fridays, 12:45 UTC
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write # write findings to the Security tab
+      actions: read # read workflow run metadata (required by CodeQL)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The template's placeholder module is not valid Python until initialized,
+      # so materialize it first. No-op in a project generated from the template.
+      - name: Materialize template placeholders (no-op once initialized)
+        run: |
+          if [ -x scripts/init-project.sh ]; then
+            scripts/init-project.sh --ci
+          fi
+      - uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: python
+          build-mode: none
+      - uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3

@@ -1,0 +1,13 @@
+# External link checks are advisory: a remote outage must not block a merge.
+no_progress = true
+max_retries = 2
+timeout = 20
+accept = ["200..=299", "429"]
+
+exclude = [
+    # Raw template placeholders, and the throwaway values CI materializes.
+    '^https://github\.com/\{\{[A-Z_]+\}\}/\{\{[A-Z_]+\}\}',
+    '^https://github\.com/example-org/template-check',
+    # This authenticated reporting route commonly returns 404 to link bots.
+    '/security/advisories/new$',
+]

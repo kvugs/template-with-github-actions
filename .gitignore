@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# Environments / tooling
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+!.env.*.example
+.python-version.local
+.direnv/
+
+# uv
+# (uv.lock IS committed - do not ignore it)
+.uv/
+
+# Test / coverage / type / lint caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.basedpyright/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+coverage.txt
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Node (only if a frontend lands here)
+node_modules/
+
+# Agent tooling - shared settings may be committed; per-machine ones are not
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Logs
+*.log
+
+# Add project-specific generated data/artifact paths here. Avoid a blanket
+# `data/` rule: it can silently hide fixtures, migrations, and intended assets.

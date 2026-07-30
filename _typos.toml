@@ -1,0 +1,10 @@
+# typos runs in the pre-commit hook. Add real words it flags here rather than
+# switching the hook off - a spell checker with one exception is still useful.
+# https://github.com/crate-ci/typos
+
+[files]
+extend-exclude = ["uv.lock", ".git/"]
+
+# Words this project uses that typos would otherwise "correct". Add as needed:
+# [default.extend-words]
+# crate = "crate"

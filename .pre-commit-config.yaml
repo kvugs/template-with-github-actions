@@ -10,8 +10,10 @@
 # Every hook must be classified in scripts/check-static.sh as CI-enforced or
 # intentionally local/manual. scripts/check-hook-coverage.py rejects omissions.
 #
-# Dependabot's pre-commit ecosystem keeps remote revisions current. Review its
-# PRs: upstream mutable aliases such as `v1` or `nightly` are not acceptable.
+# Dependabot's pre-commit ecosystem keeps remote revisions current except for
+# Lychee, whose prefixed release tags currently crash Dependabot's parser. Keep
+# its immutable `lychee-vX.Y.Z` revision current manually. Review every update:
+# upstream mutable aliases such as `v1` or `nightly` are not acceptable.
 minimum_pre_commit_version: "4.0.0"
 default_install_hook_types: [pre-commit, commit-msg]
 fail_fast: false

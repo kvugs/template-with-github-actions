@@ -55,6 +55,12 @@ updates:
     labels: ["dependencies", "ci"]
     cooldown:
       default-days: 7
+    # Lychee publishes `lychee-vX.Y.Z` tags. Dependabot's pre-commit updater
+    # currently crashes while comparing that prefix with the numeric release
+    # version, so keep only this immutable revision manual until its parser is
+    # fixed. All other hook repositories remain automated.
+    ignore:
+      - dependency-name: "https://github.com/lycheeverse/lychee"
     groups:
       pre-commit-hooks:
         patterns: ["*"]

@@ -13,6 +13,14 @@ provenance; add project-specific decisions above them.
 
 ---
 
+## 2026-07-30 - Keep Lychee outside Dependabot temporarily
+
+**What:** The pre-commit Dependabot configuration ignores only Lychee. Its immutable `lychee-vX.Y.Z` revision remains pinned in `.pre-commit-config.yaml` and is updated manually; every other remote hook stays Dependabot-managed.
+
+**Why:** Dependabot's pre-commit updater resolves Lychee's release correctly, then crashes internally while comparing the prefixed tag with a numeric version. Retrying cannot repair that deterministic parser error, and replacing the release tag with a mutable alias would weaken reproducibility.
+
+**Result:** Weekly pre-commit update jobs can finish without hiding failures for unrelated hooks. Lychee remains deterministic and advisory, with one explicit manual maintenance exception to remove once Dependabot supports its tag format.
+
 ## 2026-07-29 - Separate library compatibility from the tested environment
 
 **What:** Runtime additions now receive lower bounds, development tools remain exact, and `uv.lock` records the complete tested resolution. `just update` temporarily relaxes exact direct requirements, resolves under the project's index and age policy, then writes the chosen versions back.

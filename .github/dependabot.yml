@@ -1,0 +1,60 @@
+# Grouped, cooled-down, and rate-limited so dependency noise never buries anyone.
+# Only grouped development-tool minor/patch updates auto-merge. Runtime,
+# Actions, hook, and major updates wait for a human.
+#
+# Ecosystem note: this project uses uv, so the ecosystem is `uv`, not `pip`.
+# `pip` reads pyproject.toml but does not understand uv.lock, which means the
+# lockfile CI installs from (`uv sync --locked`) would never get updated - every
+# bump PR would fail the gate.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: friday
+      time: "12:45"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    # Let a release settle before adopting it. Security updates ignore cooldown.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      # Group only development tools. Runtime updates can change behavior and
+      # remain separate, reviewable PRs regardless of SemVer.
+      python-dev-minor-patch:
+        applies-to: version-updates
+        dependency-type: development
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: friday
+      time: "12:45"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Keeps the `rev:` pins in .pre-commit-config.yaml current, so nobody has to
+  # remember `pre-commit autoupdate`.
+  - package-ecosystem: pre-commit
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: friday
+      time: "12:45"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+    cooldown:
+      default-days: 7
+    groups:
+      pre-commit-hooks:
+        patterns: ["*"]

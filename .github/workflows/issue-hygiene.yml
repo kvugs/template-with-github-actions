@@ -1,0 +1,112 @@
+# Keeps the two markers of an umbrella issue - the ☂️ title prefix and the
+# `umbrella` label - saying the same thing. Either one alone is a filter people
+# cannot trust, and both are set by hand often enough to drift: the label gets
+# added to an existing issue, or the emoji gets lost in a title rewrite.
+#
+# Whichever side you edited last wins, so there is no fight and no rule to
+# remember: put ☂️ in the title and the label appears; remove the label and the
+# ☂️ goes with it.
+#
+# This does not loop. Edits made with GITHUB_TOKEN do not trigger further
+# workflow runs, which is exactly the property this job depends on.
+name: Issue hygiene
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled]
+
+permissions: {}
+
+concurrency:
+  # Not `cancel-in-progress`: two label events in quick succession are two
+  # separate decisions, and cancelling the first mid-write leaves the issue
+  # half-synced.
+  group: issue-hygiene-${{ github.event.issue.number }}
+
+jobs:
+  umbrella-marker:
+    name: umbrella-marker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # Retitle and relabel the issue that triggered this run.
+    steps:
+      - name: Sync the ☂️ prefix and the umbrella label
+        env:
+          # `gh` needs no checkout as long as GH_REPO names the repository.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          # Via env, never inlined into the script: an issue title is untrusted
+          # input. The script passes it to `gh` as an argument vector, so it
+          # never reaches a shell either.
+          TITLE: ${{ github.event.issue.title }}
+          LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
+          ACTION: ${{ github.event.action }}
+          CHANGED_LABEL: ${{ github.event.label.name }}
+          TITLE_CHANGED: ${{ github.event.changes.title != null }}
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          LABEL = "umbrella"
+          MARK = "☂️"  # ☂ plus the variation selector that renders it in color.
+          # Some keyboards and paste sources drop the variation selector, so a
+          # title is "marked" if it starts with the umbrella either way.
+          LEADING = re.compile(r"^[\s☂️]+")
+
+          title = os.environ["TITLE"]
+          labels = set(json.loads(os.environ["LABELS"]))
+          number = os.environ["NUMBER"]
+          action = os.environ["ACTION"]
+
+          bare = LEADING.sub("", title)
+          marked = title.lstrip().startswith("☂")
+          has_label = LABEL in labels
+
+
+          def run(*args: str) -> None:
+              print("gh issue edit", number, *args)
+              subprocess.run(["gh", "issue", "edit", number, *args], check=True)
+
+
+          # Removing the label is how you say "this is not an umbrella", so the
+          # prefix follows it out rather than being restored a second later.
+          if action == "unlabeled" and os.environ.get("CHANGED_LABEL") == LABEL:
+              if marked:
+                  run("--title", bare or "Untitled")
+              sys.exit(0)
+
+          # Same move from the other direction: the ☂️ was deliberately edited
+          # out of the title, so the label goes too.
+          if action == "edited" and os.environ.get("TITLE_CHANGED") == "true":
+              if not marked and has_label:
+                  run("--remove-label", LABEL)
+                  sys.exit(0)
+
+          if not (marked or has_label):
+              print("Not an umbrella issue - nothing to do.")
+              sys.exit(0)
+
+          desired = f"{MARK} {bare}" if bare else MARK
+          if desired != title:
+              run("--title", desired)
+
+          if not has_label:
+              # Its own call, after the retitle: on a repository where
+              # scripts/setup-repo.sh has not created the label yet, `gh` exits
+              # non-zero here, and a combined call would roll the title fix back
+              # with it.
+              try:
+                  run("--add-label", LABEL)
+              except subprocess.CalledProcessError:
+                  print(
+                      f"::error title=Missing label::Could not add the `{LABEL}` "
+                      "label. Run ./scripts/setup-repo.sh to create the label set."
+                  )
+                  sys.exit(1)
+          PY

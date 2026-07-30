@@ -1,0 +1,180 @@
+# Fast local gate. Target: a couple of seconds on a warm cache.
+# Heavy project checks (basedpyright, package builds, Trivy, CodeQL, `external`
+# tests) live in CI, never here. `git commit --no-verify` is allowed for
+# emergencies if you leave a one-line note in the PR.
+#
+# One-time cost on a fresh machine: `gitleaks` and `actionlint` are Go tools, so
+# the first run downloads a Go toolchain and builds them (a few minutes). Every
+# run after that is a cached binary. Nothing here builds a virtualenv per run.
+#
+# Every hook must be classified in scripts/check-static.sh as CI-enforced or
+# intentionally local/manual. scripts/check-hook-coverage.py rejects omissions.
+#
+# Dependabot's pre-commit ecosystem keeps remote revisions current. Review its
+# PRs: upstream mutable aliases such as `v1` or `nightly` are not acceptable.
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, commit-msg]
+fail_fast: false
+
+repos:
+  # --- Ruff: lint + format. The Python style authority in the project. ---
+  # Use the locked project binary instead of maintaining a second remote pin.
+  # Order matters: fix lint violations first, then format the result.
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff (lint, autofix)
+        entry: uv run --locked ruff check --fix
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+      - id: ruff-format
+        name: ruff (format)
+        entry: uv run --locked ruff format
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+
+  # --- Secret scan: fast, staged-diff only. Blocks committing credentials. ---
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+      # The upstream hook is staged-only even under `--all-files`. This manual
+      # alias negates those entrypoint flags so required CI scans the Git tree.
+      - id: gitleaks
+        alias: gitleaks-full
+        name: Detect hardcoded secrets (full Git tree)
+        args: [--pre-commit=false, --staged=false]
+        stages: [manual]
+
+  # --- Lockfile: keeps uv.lock in step with pyproject.toml automatically, so
+  #     CI's `uv sync --locked` never fails on a stale lock. Local rather than
+  #     the upstream uv-pre-commit hook - see scripts/uv-lock.sh for why. ---
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: uv lock (pinned index)
+        entry: scripts/uv-lock.sh
+        language: script
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+  # --- Tiny hygiene hooks. All sub-second; each earns its place. ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # `--all-files` does not override this hook's staged-only default.
+        args: [--maxkb=1024, --enforce-all]
+      - id: check-case-conflict # breaks clones on macOS/Windows otherwise
+      - id: check-illegal-windows-names
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: detect-private-key
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: check-ast
+      - id: no-commit-to-branch # `main` is PR-only; mirrors branch protection
+        args: [--branch, main]
+
+  # --- CI config correctness. A typo in a workflow is otherwise only found by
+  #     pushing it. actionlint also shellchecks `run:` blocks. ---
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+        # actionlint only checks embedded `run:` scripts when ShellCheck is on
+        # PATH. Point it at the locked wrapper so local and CI results match.
+        args: [-shellcheck=scripts/actionlint-shellcheck.sh]
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.4
+    hooks:
+      - id: check-github-workflows
+      - id: check-github-actions
+      - id: check-github-issue-config
+      - id: check-github-issue-forms
+      - id: check-dependabot
+
+  # --- Security semantics for workflows: immutable actions, least-privilege
+  #     tokens, safe triggers, and untrusted-input handling. ---
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.28.0
+    hooks:
+      - id: zizmor
+
+  # --- Shell scripts. Use the same locked ShellCheck binary actionlint calls. ---
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: shellcheck
+        entry: uv run --locked shellcheck
+        language: system
+        types: [shell]
+
+  # --- Shell formatting: the shfmt/shellcheck pair mirrors ruff-format/ruff-check,
+  #     so `scripts/` gets the same "machines own style" treatment as `src/`. ---
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.13.1-1
+    hooks:
+      - id: shfmt
+        name: shfmt (format)
+        # -w write in place, -i 2 two-space indent (matches the existing
+        # scripts), -s simplify redundant constructs.
+        args: [-w, -i, "2", -s]
+
+  # --- Spelling. Rust-fast, very low false-positive rate. Tune in _typos.toml. ---
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.48.0
+    hooks:
+      - id: typos
+        # Upstream writes fixes by default. Required gates report only.
+        args: [--force-exclude]
+
+  # --- Markdown structure. Prose line length and table alignment are disabled
+  #     in .markdownlint-cli2.yaml; this catches broken document structure. ---
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+
+  # --- External links. Manual/advisory because remote availability is not a
+  #     property of the commit; informational.yml runs it on PRs and nightly. ---
+  - repo: https://github.com/lycheeverse/lychee
+    rev: lychee-v0.24.2
+    hooks:
+      - id: lychee
+        files: \.md$
+        stages: [manual]
+
+  # --- Commit messages. The PR title becomes the squash commit on main, so use
+  #     the same Conventional Commit shape for both. ---
+  - repo: local
+    hooks:
+      - id: commitizen
+        name: commitizen (Conventional Commit message)
+        entry: uv run --locked cz check --allow-abort --commit-msg-file
+        language: system
+        stages: [commit-msg]
+
+  # --- Project-specific guards. ---
+  - repo: local
+    hooks:
+      # Catches the failure mode where an ambient UV_INDEX_URL re-locks the
+      # project against a private mirror that GitHub runners cannot reach.
+      - id: lockfile-public-index
+        name: uv.lock uses the public index only
+        entry: scripts/check-lock-index.sh
+        language: script
+        files: ^uv\.lock$
+        pass_filenames: false

@@ -1,0 +1,35 @@
+name: Bug
+description: Something behaves wrong.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened vs. what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Number the steps from a clean start, so someone else can follow them exactly and land on the same result. "Can't reproduce reliably" is a valid answer - say so, and describe what you were doing when it showed up.
+      placeholder: |
+        1. Run `...`
+        2. Open ...
+        3. Click ... -> the error appears
+    validations:
+      required: true
+  - type: textarea
+    id: visuals
+    attributes:
+      label: Screenshot, recording, or diagram
+      description: Strongly encouraged. Drag images or a short screen recording straight into this box, or paste a terminal capture. One picture of the broken state usually replaces a round of questions.
+    validations:
+      required: false
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version, anything relevant.
+    validations:
+      required: false

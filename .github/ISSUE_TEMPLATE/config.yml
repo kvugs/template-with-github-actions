@@ -1,0 +1,11 @@
+# Blank issues stay enabled: a real report that does not fit a form is worth
+# more than a form that discourages it.
+blank_issues_enabled: true
+
+# Optional integration. If the project has a chat server, uncomment this and
+# paste a real invite URL. A placeholder URL here renders as a dead link on the
+# "New issue" page, so it is commented out rather than left half-filled.
+# contact_links:
+#   - name: Discord
+#     url: https://discord.gg/REPLACE_WITH_REAL_INVITE
+#     about: Quick questions, decisions, and the activity feed live here.

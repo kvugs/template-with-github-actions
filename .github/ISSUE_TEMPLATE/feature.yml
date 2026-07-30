@@ -1,0 +1,25 @@
+name: Feature
+description: Propose a new feature, extension, or improvement.
+labels: ["feature"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What & why
+      description: What should exist, and what problem it solves for the user.
+    validations:
+      required: true
+  - type: textarea
+    id: sketch
+    attributes:
+      label: Rough code/textual sketch of an approach (optional)
+      description: A rough starting point - where it'd live, the shape of it, a gotcha to watch. Leave blank if unsure.
+    validations:
+      required: false
+  - type: textarea
+    id: visuals
+    attributes:
+      label: Mockup, diagram, or screenshot (optional)
+      description: Drag files straight into this box. A rough sketch of the interface, a flow diagram, or a shot of how another tool solves it says more than a paragraph. Leave blank if unsure.
+    validations:
+      required: false

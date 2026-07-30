@@ -1,0 +1,63 @@
+# The one form that is deliberately not atomic. It holds the goal and the
+# reasoning; the work itself lives in atomic sub-issues linked from the
+# checklist.
+#
+# `title` pre-fills the umbrella emoji. .github/workflows/issue-hygiene.yml puts
+# it back if it is removed and keeps the `umbrella` label in step, so "starts
+# with ☂️" is a reliable filter rather than a convention people have to remember.
+name: Umbrella
+description: A goal too large for one issue, tracked as a checklist of atomic sub-issues.
+title: "☂️ "
+labels: ["umbrella"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the ☂️ at the start of the title - it is how umbrellas are told apart from ordinary work at a glance.
+
+        Every other issue in this repository is atomic. This is the one form that is not,
+        and the trade is that each sub-issue below has to be: an indivisible unit that either
+        completes or does not happen at all. If a child cannot be closed and verified on its
+        own, it is a fragment, and it belongs merged into a sibling rather than listed here.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What is true once the last sub-issue closes. Write the finished state, not the steps - the steps are the checklist below.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this is worth doing
+      description: The problem, who feels it, and what makes now the moment. This is the part a reader cannot reconstruct from the children, so it is the main reason the umbrella exists.
+    validations:
+      required: true
+  - type: textarea
+    id: children
+    attributes:
+      label: Sub-issues
+      description: One line per child, each atomic and each closeable by a single PR. Open them as GitHub sub-issues, or start with a task list here and convert it - either way the tree stays navigable from both ends. Unfiled work is fine as plain text until it earns an issue.
+      value: |
+        - [ ] #
+        - [ ] #
+      placeholder: |
+        - [ ] #12 - extract the config loader (no behavior change)
+        - [ ] #13 - read the new `timeout` key
+        - [ ] not filed yet - document the key in README
+    validations:
+      required: true
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Out of scope (optional)
+      description: The neighboring work this umbrella deliberately does not cover. Naming it once here is what stops the checklist growing without end.
+    validations:
+      required: false
+  - type: textarea
+    id: visuals
+    attributes:
+      label: Mockup, diagram, or screenshot (optional)
+      description: Drag files straight into this box. A diagram of the end state, or of how the pieces fit together, carries an umbrella further than it carries a single issue.
+    validations:
+      required: false

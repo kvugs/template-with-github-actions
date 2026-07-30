@@ -1,0 +1,168 @@
+[project]
+name = "{{PROJECT_SLUG}}"
+version = "0.0.0"
+description = "{{PROJECT_DESCRIPTION_ESCAPED}}"
+readme = "README.md"
+requires-python = ">=3.14"
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+dependencies = []
+
+# No license is set on purpose: each project born from this template picks its
+# own. Until you add one, the code is legally all-rights-reserved. To set one,
+# add a LICENSE file and uncomment both lines below (PEP 639 SPDX form):
+#   license = "MIT"
+#   license-files = ["LICENSE"]
+
+[project.urls]
+Repository = "https://github.com/{{GITHUB_OWNER}}/{{PROJECT_SLUG}}"
+Issues = "https://github.com/{{GITHUB_OWNER}}/{{PROJECT_SLUG}}/issues"
+
+# Uncomment to ship a command-line entry point:
+# [project.scripts]
+# {{PROJECT_SLUG}} = "{{PACKAGE_NAME}}.__main__:main"
+
+# uv dependency group installed by default with `uv sync`.
+# These are the only tools CI and pre-commit need.
+[dependency-groups]
+dev = [
+    "ruff==0.16.0",
+    "basedpyright==1.39.9",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pre-commit==4.6.1",
+    "commitizen==4.16.5",
+    "hatchling==1.31.0",
+    "shellcheck-py==0.11.0.1",
+]
+
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{PACKAGE_NAME}}"]
+
+# -----------------------------------------------------------------------------
+# uv - pin the default index so `uv.lock` resolves identically for everyone.
+# Without this, ambient uv/pip index variables in one contributor's shell can
+# rewrite the lockfile to a private mirror that CI cannot reach. To use a mirror
+# deliberately, update the lock-index allowlist and CI together.
+# -----------------------------------------------------------------------------
+[tool.uv]
+# Keep local uv behavior within the range exercised by this template. CI pins
+# one version inside the range; widening it is a deliberate compatibility call.
+required-version = ">=0.12.0,<0.13"
+
+# Runtime requirements describe library compatibility; uv.lock records the exact
+# environment tested here. `just add-dev` overrides this to exact for tools whose
+# command-line behavior is part of the development contract.
+add-bounds = "lower"
+
+# Ignore anything published in the last x days. A compromised release is usually
+# yanked within days, so this trades a week of freshness for not being the first
+# to install a malicious version. Compared against each artifact's upload time,
+# and a "day" is a fixed 24 hours. To override for one
+# command (an urgent security fix):
+#   UV_EXCLUDE_NEWER=false just lock
+exclude-newer = "6 days"
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true
+
+# -----------------------------------------------------------------------------
+# Commitizen - local commits and PR titles use Conventional Commits. GitHub uses
+# the PR title as the squash commit, so this keeps the history on main legible.
+# -----------------------------------------------------------------------------
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"
+tag_format = "v$version"
+
+# -----------------------------------------------------------------------------
+# Ruff - the Python style/lint authority. Reviewers never comment on anything
+# Ruff can fix. Keep this list boring; churn here is churn for everyone.
+# -----------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # isort (import sorting)
+    "UP",       # pyupgrade
+    "B",        # flake8-bugbear
+    "SIM",      # flake8-simplify
+    "C4",       # flake8-comprehensions
+    "S",        # flake8-bandit (security)
+    "T10",      # flake8-debugger (no committed breakpoint()/pdb)
+    "PT",       # flake8-pytest-style
+    "RUF",      # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are allowed bare asserts - that is what pytest is built on.
+"tests/**" = ["S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["{{PACKAGE_NAME}}"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# -----------------------------------------------------------------------------
+# basedpyright - required type gate.
+# Loosen to "standard" only if it blocks development.
+# -----------------------------------------------------------------------------
+[tool.basedpyright]
+typeCheckingMode = "strict"   # off → basic → standard → strict → all
+pythonVersion = "3.14"
+include = ["src", "tests", "scripts"]
+reportMissingTypeStubs = false
+
+# -----------------------------------------------------------------------------
+# pytest - `external` marks the tests that live in the informational CI job.
+# The required "test-fast" job runs `-m "not external"`.
+# -----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+# Pytest 9's strict mode enables strict config, markers, parametrization IDs,
+# and xfail behavior. pytest is locked, so new strictness is adopted deliberately
+# through dependency updates rather than arriving unpredictably.
+strict = true
+addopts = "-ra --import-mode=importlib"
+markers = [
+    # Named for the property that decides the gate, not for the symptom. A test
+    # is `external` when something outside this repository can change its
+    # result: a network call, a live service, a model. Those cannot be required
+    # checks, because a red gate nobody can fix from their branch teaches people
+    # to re-run until green. Slowness on its own is not a reason to mark a test:
+    # a slow but self-contained test still belongs in the required gate.
+    "external: reaches outside the repository (integration, network, model calls). Not in the required gate.",
+]
+# Warnings are errors, so a dependency's deprecation is caught the week it lands
+# rather than the release it breaks. Allowlist a specific one like this:
+#   'ignore:some message:DeprecationWarning:some\.module'
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]

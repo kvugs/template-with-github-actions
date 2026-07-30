@@ -1,0 +1,101 @@
+# Advisory PR hygiene. Reports a failure but never blocks a merge: this job is
+# absent from the required contexts in .github/rulesets/main.json on purpose. A
+# required check here would block the first legitimate no-issue fix and teach
+# contributors that the rule is an obstacle rather than a habit.
+#
+# Separate from informational.yml because it needs the `edited` trigger. The fix
+# for a missing issue link is editing the PR body, and a check that cannot re-run
+# after that edit is a check people learn to ignore. informational.yml stays off
+# `edited` so external tests, coverage, and Trivy do not re-run on every typo fix
+# in a description.
+name: PR hygiene
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: pr-hygiene-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  issue-link:
+    name: issue-link
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Dependabot opens its own PRs against no issue, and drafts are still being
+    # written. Undrafting fires `ready_for_review`, so a draft is checked the
+    # moment it asks for review.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - name: Require a referenced issue or a stated exemption
+        env:
+          # Via env, never inlined into the script: a PR body is untrusted input.
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 <<'PY'
+          import os
+          import re
+          import sys
+
+          body = os.environ.get("BODY") or ""
+
+          # HTML comments vanish when rendered but stay in the body, and the PR
+          # template's own comment shows `Closes #12` as an example. Matching
+          # inside comments would pass every PR that left the template intact.
+          body = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
+
+          LINK = re.compile(
+              r"(?:^|[^\w])"
+              r"(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?|refs?|part of)\s+"
+              r"(?:https://github\.com/[\w.-]+/[\w.-]+/issues/\d+"
+              r"|[\w.-]+/[\w.-]+#\d+"
+              r"|#\d+)",
+              re.IGNORECASE,
+          )
+          # A reason long enough to be a reason. `No issue: x` is not one.
+          EXEMPT = re.compile(r"no issue:[ \t]*(\S.{9,})", re.IGNORECASE)
+
+
+          def summary(text: str) -> None:
+              path = os.environ.get("GITHUB_STEP_SUMMARY")
+              if path:
+                  with open(path, "a", encoding="utf-8") as handle:
+                      handle.write(text + "\n")
+
+
+          match = LINK.search(body)
+          if match:
+              print(f"Issue reference found: {match.group(0).strip()}")
+              summary(f"### issue-link\n\nReferenced: `{match.group(0).strip()}`")
+              sys.exit(0)
+
+          exempt = EXEMPT.search(body)
+          if exempt:
+              reason = exempt.group(1).strip()
+              print(f"Exemption stated: {reason}")
+              summary(f"### issue-link\n\nExempt: {reason}")
+              sys.exit(0)
+
+          print(
+              "::error title=No issue referenced::Add `Closes #123` to the PR "
+              "description (one keyword per issue, each on its own line), or "
+              "`Refs #123` if this does not finish the issue. If no issue "
+              "applies, write `No issue: <reason>` instead. See CONTRIBUTING.md."
+          )
+          summary(
+              "### issue-link\n\n"
+              "No issue reference found in the description.\n\n"
+              "- `Closes #123` closes the issue on merge. Repeat the keyword per "
+              "issue, each on its own line.\n"
+              "- `Refs #123` links without closing.\n"
+              "- `No issue: <reason>` states an exemption. Only typo/formatting "
+              "fixes and Dependabot bumps qualify.\n\n"
+              "This check is advisory and does not block the merge."
+          )
+          sys.exit(1)
+          PY

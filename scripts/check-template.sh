@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if ! grep -qF '{{PROJECT_SLUG}}' "$REPO_ROOT/pyproject.toml"; then
+if "$REPO_ROOT/scripts/init-project.sh" --check >/dev/null 2>&1; then
   echo "template-ci: initialized project - template-only checks do not apply."
   exit 0
 fi

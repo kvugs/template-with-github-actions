@@ -100,7 +100,7 @@ repos:
         args: [-shellcheck=scripts/actionlint-shellcheck.sh]
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.37.4
+    rev: 0.38.0
     hooks:
       - id: check-github-workflows
       - id: check-github-actions
@@ -111,7 +111,7 @@ repos:
   # --- Security semantics for workflows: immutable actions, least-privilege
   #     tokens, safe triggers, and untrusted-input handling. ---
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.28.0
+    rev: v1.30.1
     hooks:
       - id: zizmor
 
@@ -127,7 +127,7 @@ repos:
   # --- Shell formatting: the shfmt/shellcheck pair mirrors ruff-format/ruff-check,
   #     so `scripts/` gets the same "machines own style" treatment as `src/`. ---
   - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.13.1-1
+    rev: v3.14.1-1
     hooks:
       - id: shfmt
         name: shfmt (format)
@@ -137,7 +137,7 @@ repos:
 
   # --- Spelling. Rust-fast, very low false-positive rate. Tune in _typos.toml. ---
   - repo: https://github.com/crate-ci/typos
-    rev: v1.48.0
+    rev: v1.50.2
     hooks:
       - id: typos
         # Upstream writes fixes by default. Required gates report only.
